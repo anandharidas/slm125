@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(modal --version)",
+      "Bash(modal profile *)",
+      "WebFetch(domain:modal.com)"
+    ]
+  }
+}

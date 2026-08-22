@@ -1,0 +1,122 @@
+{
+  "seq_len": 1024,
+  "dtype": "uint16",
+  "train_windows": 1991282,
+  "val_windows": 20119,
+  "train_tokens": 2039072768,
+  "val_tokens": 20601856,
+  "shards": [
+    {
+      "source": "case-law",
+      "shard": 0,
+      "train_windows": 174458,
+      "val_windows": 1763,
+      "train_tokens": 178644992,
+      "val_tokens": 1805312
+    },
+    {
+      "source": "case-law",
+      "shard": 1,
+      "train_windows": 175051,
+      "val_windows": 1769,
+      "train_tokens": 179252224,
+      "val_tokens": 1811456
+    },
+    {
+      "source": "case-law",
+      "shard": 2,
+      "train_windows": 174671,
+      "val_windows": 1765,
+      "train_tokens": 178863104,
+      "val_tokens": 1807360
+    },
+    {
+      "source": "case-law",
+      "shard": 3,
+      "train_windows": 173924,
+      "val_windows": 1757,
+      "train_tokens": 178098176,
+      "val_tokens": 1799168
+    },
+    {
+      "source": "sec",
+      "shard": 0,
+      "train_windows": 140168,
+      "val_windows": 1416,
+      "train_tokens": 143532032,
+      "val_tokens": 1449984
+    },
+    {
+      "source": "sec",
+      "shard": 1,
+      "train_windows": 138567,
+      "val_windows": 1400,
+      "train_tokens": 141892608,
+      "val_tokens": 1433600
+    },
+    {
+      "source": "sec",
+      "shard": 2,
+      "train_windows": 141069,
+      "val_windows": 1425,
+      "train_tokens": 144454656,
+      "val_tokens": 1459200
+    },
+    {
+      "source": "sec",
+      "shard": 3,
+      "train_windows": 140550,
+      "val_windows": 1420,
+      "train_tokens": 143923200,
+      "val_tokens": 1454080
+    },
+    {
+      "source": "sec",
+      "shard": 4,
+      "train_windows": 139257,
+      "val_windows": 1407,
+      "train_tokens": 142599168,
+      "val_tokens": 1440768
+    },
+    {
+      "source": "sec",
+      "shard": 5,
+      "train_windows": 140258,
+      "val_windows": 1417,
+      "train_tokens": 143624192,
+      "val_tokens": 1451008
+    },
+    {
+      "source": "fineweb-edu",
+      "shard": 0,
+      "train_windows": 113914,
+      "val_windows": 1151,
+      "train_tokens": 116647936,
+      "val_tokens": 1178624
+    },
+    {
+      "source": "fineweb-edu",
+      "shard": 1,
+      "train_windows": 112518,
+      "val_windows": 1137,
+      "train_tokens": 115218432,
+      "val_tokens": 1164288
+    },
+    {
+      "source": "fineweb-edu",
+      "shard": 2,
+      "train_windows": 113744,
+      "val_windows": 1149,
+      "train_tokens": 116473856,
+      "val_tokens": 1176576
+    },
+    {
+      "source": "fineweb-edu",
+      "shard": 3,
+      "train_windows": 113133,
+      "val_windows": 1143,
+      "train_tokens": 115848192,
+      "val_tokens": 1170432
+    }
+  ]
+}
