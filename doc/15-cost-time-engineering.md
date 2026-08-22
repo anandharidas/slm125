@@ -1,4 +1,4 @@
-# Chapter 14 — The Economics of a Small Model
+# Chapter 15 — The Economics of a Small Model
 
 ## In plain terms
 
@@ -41,7 +41,7 @@ This asymmetry should govern every decision you make:
 ### And $8 of it was wasted
 
 Of the $30 pretraining cost, roughly **$8 was thrown away** when the training run was killed
-by a dropped client connection (Chapter 13, Failure 2). A clean single run would have cost
+by a dropped client connection (Chapter 14, Failure 2). A clean single run would have cost
 about **$24**.
 
 We report this rather than quoting the clean figure because the $8 is instructive: the
@@ -207,7 +207,7 @@ for an individual and 7B is an institutional project.
 
 The total was accurate to within a percent, but partly by luck — the data pipeline came in
 under budget by roughly what the operational error cost. Both halves of that should be
-reported, not just the flattering aggregate. Chapter 15 decomposes this variance fully and
+reported, not just the flattering aggregate. Chapter 16 decomposes this variance fully and
 shows that the cost *model* was exact; the overrun was entirely operator error.
 
 ---
@@ -232,4 +232,4 @@ shows that the cost *model* was exact; the overrun was entirely operator error.
 
 ---
 
-*Next: [Chapter 15 — Epochs, Cost, and Quality](15-epochs-cost-quality.md)*
+*Next: [Chapter 16 — Epochs, Cost, and Quality](16-epochs-cost-quality.md)*

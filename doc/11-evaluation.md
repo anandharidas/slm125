@@ -104,7 +104,7 @@ and top-5 the same with membership in the five highest-probability tokens. Unlik
 accuracy discards all information about *how* confident the model was — a model that assigns
 0.99 and one that assigns 0.21 to the correct top-ranked token score identically. That is why
 both belong in a report: perplexity is the better training signal, accuracy is the number a
-non-specialist can actually interpret. Chapter 15 derives the empirical relationship between
+non-specialist can actually interpret. Chapter 16 derives the empirical relationship between
 them on our data.
 
 **Perplexity is only comparable within a fixed tokenizer and a fixed evaluation set.** A model

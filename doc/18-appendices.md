@@ -1,4 +1,4 @@
-# Chapter 17 — Appendices
+# Chapter 18 — Appendices
 
 ---
 
@@ -178,6 +178,12 @@ python3 -c "import modal; print(modal.Function.from_name(
 modal run modal_train.py::evaluate                 # per-source ppl + generations
 modal run modal_train.py::accuracy                 # per-source top-1 / top-5 accuracy
 modal run modal_train.py::push                     # publish to HuggingFace
+
+# Serving (Chapter 13)
+modal deploy modal_serve.py                        # inference API + standalone playground
+cd ../web && npm install && npm run dev            # frontend, http://localhost:3000
+npx vercel --prod                                  # deploy frontend to Vercel
+npx vercel project protection                      # show deployment protection state
 modal run modal_train.py::verify_hub               # load from Hub, clean container
 
 # Inspect / clean up
@@ -276,7 +282,7 @@ Epoch boundaries: steps 3,892 / 7,784 / 11,676 — no discontinuity at any.
 | 4 | 15,568 | 8.16B | ~$24 | 8.25 | −0.29 |
 
 Values at epoch boundaries are linear interpolations between adjacent measured evals. They
-are **not** equivalent to dedicated shorter runs — see Chapter 15 on the cosine-annealing
+are **not** equivalent to dedicated shorter runs — see Chapter 16 on the cosine-annealing
 confound.
 
 ### Effective-data efficiency of repetition (Muennighoff et al., $R^*_D = 15$)
@@ -301,8 +307,43 @@ confound.
 | Evaluate + publish (6) | $0.70 / 10 min | $0.75 / 12 min | +7% |
 | **Total** | **$25.55 / 1h 45m** | **$33.19 / 1h 50m** | **+30%** |
 
-Excluding the $8.30 lost to the client disconnect (Chapter 13), pretraining cost $21.70
+Excluding the $8.30 lost to the client disconnect (Chapter 14), pretraining cost $21.70
 against a projection of $21.70.
+
+### Serving (Chapter 13)
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/` | GET | Self-contained playground UI (8,867 bytes, no build step) |
+| `/docs` | GET | FastAPI interactive API explorer |
+| `/health` | GET | Liveness + which models are warm |
+| `/models` | GET | Preset model list |
+| `/next` | POST | Top-k next-token distribution |
+| `/generate` | POST | Free continuation |
+
+Live URLs:
+
+```
+https://anand-haridas--slm125mlive-anand-serve-web.modal.run   (public)
+https://web-3balveir8-anand-7360s-projects.vercel.app          (Vercel, SSO-protected)
+```
+
+Measured latency, warm container, client in India:
+
+| Operation | Wall | Compute |
+|---|---|---|
+| Round-trip floor | 1,055 ms | ~100 ms |
+| `/next` top-k 10 | ~1,080 ms | ~30 ms |
+| `/generate` 20 tok | 1,655 ms | 600 ms |
+| `/generate` 60 tok | 2,563 ms | 1,508 ms |
+| `/generate` 120 tok | 4,008 ms | 2,953 ms |
+| `/generate` 200 tok | 6,110 ms | 5,055 ms |
+
+Generation is **25 ms/token, flat** across all lengths after enabling the KV cache
+(6.4× faster at 200 tokens — see Chapter 14, Failure 13).
+
+Server-side limits: prompt 4,000 chars · `max_new_tokens` 200 · `top_k` 50 · model size 2 GB ·
+3 models cached (LRU) · max 4 containers · 300 s scaledown.
 
 ---
 
@@ -382,6 +423,16 @@ to dedicated shorter runs.
 
 **Top-1 / top-5 accuracy** — fraction of positions where the correct next token was the
 single highest-probability prediction, or among the five highest.
+
+**Cold start** — the delay when a scaled-to-zero container must boot and load a model before
+serving its first request. Ours: ~9 s from Volume, 10–40 s for a fresh Hub download.
+
+**KV cache** — cached attention keys and values from previous tokens, so generating token
+*n+1* does not re-run the forward pass over tokens 1..*n*. Turns O(n²) generation into O(n).
+Disabled during training; **must be re-enabled at inference**.
+
+**Scale-to-zero** — shutting containers down when idle, so the service costs nothing at rest
+at the price of a cold start on the next request.
 
 **Weight tying** — sharing the input embedding matrix with the output projection.
 

@@ -1,4 +1,4 @@
-# Chapter 16 — What We Would Do Differently
+# Chapter 17 — What We Would Do Differently
 
 ## In plain terms
 
@@ -55,7 +55,7 @@ would not be free.
 We overwrote one checkpoint file throughout the run. That means we have per-epoch
 *perplexity* (readable from the validation curve) but no per-epoch *accuracy*, and no way to
 recover it without retraining. A few gigabytes of storage would have preserved it. See
-Chapter 15.
+Chapter 16.
 
 ### 6. Add a smoke-training step to the verification gate
 
@@ -83,9 +83,9 @@ training an identical model on a balanced mix.
 Cost: ~$24 and an hour. Cheap for a real scientific answer to a question our evaluation raised
 but could not settle.
 
-### 9. Run the four-run epoch ablation (see Chapter 15)
+### 9. Run the four-run epoch ablation (see Chapter 16)
 
-Chapter 15 reads our epoch ladder off a single run's validation curve, which is confounded by
+Chapter 16 reads our epoch ladder off a single run's validation curve, which is confounded by
 the cosine learning-rate schedule: intermediate checkpoints were never annealed, so they
 understate what a dedicated shorter run would achieve. Four independent runs annealed at 1, 2,
 3 and 4 epochs would settle it for **$60 and 2.5 hours** — the cheapest genuinely informative
@@ -204,4 +204,4 @@ significant problem we encountered.
 
 ---
 
-*Next: [Chapter 17 — Appendices](17-appendices.md)*
+*Next: [Chapter 18 — Appendices](18-appendices.md)*

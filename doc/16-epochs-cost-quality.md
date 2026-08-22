@@ -1,4 +1,4 @@
-# Chapter 15 — Epochs, Cost, and Quality: Plan versus Reality
+# Chapter 16 — Epochs, Cost, and Quality: Plan versus Reality
 
 > This chapter answers the question the whole project was really asking: **what did each
 > dollar actually buy?** It consolidates the planning, the cost model, and the quality
@@ -93,7 +93,7 @@ Both were speed optimisations that also happened to reduce cost.
 
 **The one overrun was operational, not technical.** Pretraining exceeded its projection by
 $8.30 — and that $8 is precisely the wasted GPU time from the dropped client connection
-(Chapter 13, Failure 2). Strip it out and the run came in at ~$21.70 against a projected
+(Chapter 14, Failure 2). Strip it out and the run came in at ~$21.70 against a projected
 $21.70: exact. **The cost model was accurate; the operator was not.**
 
 **The aggregate hides both errors.** Total was $33.19 against an original plan of ~$33 — a 1%
@@ -274,7 +274,7 @@ perplexity **and** top-1 accuracy per source.
 
 Cost: $6 + 12 + 18 + 24 = \$60$ and about 2.5 hours. That is remarkably cheap for a clean
 answer to "how many epochs should I train for," and it is the single experiment we most regret
-not running. Chapter 16 lists it in the roadmap.
+not running. Chapter 17 lists it in the roadmap.
 
 A cheaper 80% approximation: keep the single run but **save a checkpoint at every epoch
 boundary** and evaluate each. That does not fix the annealing confound, but it would have given
@@ -342,4 +342,4 @@ would have been a misleading way to report it.
 
 ---
 
-*Next: [Chapter 16 — What We Would Do Differently](16-recommendations.md)*
+*Next: [Chapter 17 — What We Would Do Differently](17-recommendations.md)*

@@ -21,7 +21,8 @@ and 989 on web text," that is because we watched it happen and wrote it down.
 
 It covers the whole pipeline: acquiring raw text, cleaning it, removing duplicates and
 benchmark contamination, training a tokenizer, packing tokens, designing the model,
-predicting cost before spending it, pretraining on eight GPUs, evaluating, and publishing.
+predicting cost before spending it, pretraining on eight GPUs, evaluating, publishing, and
+serving it behind a web UI that anyone can use.
 
 It also covers the parts that went wrong. Ten things broke during this build — two of them
 genuine bugs in a "known-good" replication guide we were following, one of which would have
@@ -60,11 +61,11 @@ everyone.
 | [10](10-pretraining.md) | Phase 5b — The Training Run | Read | **Critical** |
 | [11](11-evaluation.md) | Phase 6 — Did It Actually Learn Anything? | Read | Read |
 | [12](12-publishing.md) | Phase 6 — Publishing, and Telling the Truth | Read | Skim |
-| [13](13-failures.md) | Everything That Broke | **Critical** | **Critical** |
-| [14](14-cost-time-engineering.md) | The Economics of a Small Model | Read | Read |
-| [15](15-epochs-cost-quality.md) | Epochs, Cost, and Quality: Plan versus Reality | **Critical** | **Critical** |
-| [16](16-recommendations.md) | What We Would Do Differently | Read | Read |
-| [17](17-appendices.md) | Appendices: Formulas, Configs, Commands, Glossary | Reference | Reference |
+| [13](14-failures.md) | Everything That Broke | **Critical** | **Critical** |
+| [14](15-cost-time-engineering.md) | The Economics of a Small Model | Read | Read |
+| [15](16-epochs-cost-quality.md) | Epochs, Cost, and Quality: Plan versus Reality | **Critical** | **Critical** |
+| [16](17-recommendations.md) | What We Would Do Differently | Read | Read |
+| [17](18-appendices.md) | Appendices: Formulas, Configs, Commands, Glossary | Reference | Reference |
 
 ## The one-paragraph summary
 

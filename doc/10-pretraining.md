@@ -155,7 +155,7 @@ Writes go to a temporary file then `os.replace`, which is atomic — so a checkp
 observed half-written even if the process dies mid-save.
 
 This machinery earned its cost. Our run was killed at step 8,100 by an operational error
-(Chapter 13). It resumed from step 8,000 and lost about 100 steps — roughly 20 seconds of
+(Chapter 14). It resumed from step 8,000 and lost about 100 steps — roughly 20 seconds of
 work — instead of 22 minutes and $12.
 
 ### Committing from the parent, not the child

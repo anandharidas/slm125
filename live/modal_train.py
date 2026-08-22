@@ -425,3 +425,87 @@ def measure_accuracy(n_val_windows: int = 4000) -> dict:
 @app.local_entrypoint()
 def accuracy(n_val_windows: int = 4000):
     measure_accuracy.remote(n_val_windows)
+
+
+@app.function(image=gpu_image, gpu="L40S", volumes=VOLUMES, timeout=60 * 30)
+def precision_recall(n_val_windows: int = 2000) -> dict:
+    """Per-token-class precision/recall for the next-token task.
+
+    Next-token prediction is single-label 16,384-way classification, so MICRO
+    precision == micro recall == accuracy identically. MACRO averaging is dominated
+    by thousands of rare token classes and says little about model quality. This
+    function computes both so the difference is visible rather than asserted.
+    """
+    import glob
+    import json
+
+    import numpy as np
+    import torch
+    from transformers import AutoModelForCausalLM
+
+    import pretrain
+
+    volume.reload()
+    V = config.MODEL.vocab_size
+    model = AutoModelForCausalLM.from_pretrained(
+        config.BASE_CKPT_DIR, torch_dtype=torch.bfloat16).cuda().eval()
+
+    files = sorted(glob.glob(f"{config.VAL_TOKENS_DIR}/*.bin"))
+    toks = np.concatenate([np.fromfile(f, dtype=np.uint16) for f in files])
+    win = pretrain.as_windows(toks, config.SEQ_LEN)
+    idx = np.linspace(0, win.shape[0] - 1, min(n_val_windows, win.shape[0])).astype(np.int64)
+
+    tp = torch.zeros(V, dtype=torch.long, device="cuda")     # correct per class
+    pred_n = torch.zeros(V, dtype=torch.long, device="cuda") # TP + FP
+    true_n = torch.zeros(V, dtype=torch.long, device="cuda") # TP + FN
+    with torch.no_grad():
+        for i in range(0, idx.size, 16):
+            x = torch.from_numpy(win[idx[i:i + 16]].astype(np.int64)).cuda()
+            pred = model(input_ids=x).logits[:, :-1, :].argmax(-1).reshape(-1)
+            true = x[:, 1:].reshape(-1)
+            hit = pred == true
+            tp += torch.bincount(true[hit], minlength=V)
+            pred_n += torch.bincount(pred, minlength=V)
+            true_n += torch.bincount(true, minlength=V)
+
+    tp, pred_n, true_n = tp.cpu().numpy(), pred_n.cpu().numpy(), true_n.cpu().numpy()
+    total = int(true_n.sum())
+    micro = int(tp.sum()) / total                      # == accuracy, == micro P == micro R
+
+    seen = true_n > 0                                  # classes actually present in the eval set
+    prec = np.divide(tp, pred_n, out=np.zeros(V), where=pred_n > 0)
+    rec = np.divide(tp, true_n, out=np.zeros(V), where=true_n > 0)
+    f1 = np.divide(2 * prec * rec, prec + rec, out=np.zeros(V), where=(prec + rec) > 0)
+
+    order = np.argsort(-true_n)
+    top100 = order[:100]
+    rare = seen & (true_n < 10)
+
+    out = {
+        "eval_tokens": total,
+        "classes_in_vocab": V,
+        "classes_present": int(seen.sum()),
+        "classes_never_predicted": int(((pred_n == 0) & seen).sum()),
+        "micro_precision": micro, "micro_recall": micro, "micro_f1": micro,
+        "macro_precision_all_present": float(prec[seen].mean()),
+        "macro_recall_all_present": float(rec[seen].mean()),
+        "macro_f1_all_present": float(f1[seen].mean()),
+        "macro_precision_top100": float(prec[top100].mean()),
+        "macro_recall_top100": float(rec[top100].mean()),
+        "macro_f1_top100": float(f1[top100].mean()),
+        "rare_classes_lt10_occurrences": int(rare.sum()),
+        "macro_recall_rare": float(rec[rare].mean()) if rare.any() else None,
+        "support_top100_share": float(true_n[top100].sum() / total),
+    }
+    for k, v in out.items():
+        print(f"  {k:<34} {v:.4f}" if isinstance(v, float) else f"  {k:<34} {v:,}")
+
+    with open(f"{config.BASE_CKPT_DIR}/precision_recall.json", "w", encoding="utf-8") as fh:
+        json.dump(out, fh, indent=2)
+    volume.commit()
+    return out
+
+
+@app.local_entrypoint()
+def prec_recall(n_val_windows: int = 2000):
+    precision_recall.remote(n_val_windows)
