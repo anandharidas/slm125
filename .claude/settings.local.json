@@ -3,7 +3,12 @@
     "allow": [
       "Bash(modal --version)",
       "Bash(modal profile *)",
-      "WebFetch(domain:modal.com)"
+      "WebFetch(domain:modal.com)",
+      "WebFetch(domain:slm-finetuning-data.vercel.app)",
+      "WebFetch(domain:ai.google.dev)",
+      "Bash(curl *)",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 *)"
     ]
   }
 }

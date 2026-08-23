@@ -67,6 +67,14 @@ everyone.
 | [16](17-recommendations.md) | What We Would Do Differently | Read | Read |
 | [17](18-appendices.md) | Appendices: Formulas, Configs, Commands, Glossary | Reference | Reference |
 
+## The sequel
+
+This book ends with a model that writes fluent legal and financial prose and cannot answer a
+question. **[Teaching a Small Language Model to Answer](../sft/00-README.md)** is what happened
+next: building an instruction-tuning dataset from this corpus, and using it to turn the base
+model into one that answers from a provided passage — or says it does not know. Fourteen more
+chapters, one more complete build, about $7.
+
 ## The one-paragraph summary
 
 We streamed about 719,000 documents from three public datasets, kept 97% of them after
