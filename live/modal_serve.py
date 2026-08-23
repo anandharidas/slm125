@@ -9,6 +9,8 @@ the website proxies to it. Exposes:
   GET  /models              the preset list
   POST /next                top-k next-token distribution  <- the primary surface
   POST /generate            free continuation
+  POST /answer              grounded QA on BOTH base and fine-tuned, side by side
+  GET  /eval-sample         a held-out SFT pair (passage + question + gold answer)
 
 Any HuggingFace causal-LM id works, not just ours: the service downloads and caches
 it. Our own model is read straight off the Volume, so it needs no download at all.
@@ -23,6 +25,7 @@ Do not "tidy" these helpers back out to module scope.
 import modal
 
 import config
+import sft_config
 
 app = modal.App(f"{config.PROJECT}-serve")
 
@@ -36,7 +39,7 @@ image = (
         "numpy==2.1.3",
     )
     .env({"HF_HUB_DISABLE_PROGRESS_BARS": "1", "TOKENIZERS_PARALLELISM": "false"})
-    .add_local_python_source("config")
+    .add_local_python_source("config", "sft_config", "sft_gen")
 )
 
 volume = modal.Volume.from_name(config.VOLUME_NAME, create_if_missing=True)
@@ -195,6 +198,7 @@ def web():
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     LOCAL_ALIAS = "slm125m-live"        # our model: read from the Volume, no download
+    SFT_ALIAS = "slm125m-live-sft"      # the instruction-tuned variant, also on the Volume
     MAX_MODEL_BYTES = 2_000_000_000     # refuse anything that would blow up the container
     MAX_NEW_TOKENS = 200
     MAX_PROMPT_CHARS = 4_000
@@ -203,6 +207,9 @@ def web():
     PRESETS = [
         {"id": LOCAL_ALIAS, "label": "slm125m-live (yours, 125M)", "kind": "base",
          "note": "Trained in this project. Legal/financial base model: it continues text, it does not chat."},
+        {"id": SFT_ALIAS, "label": "slm125m-live-sft (yours, fine-tuned)", "kind": "sft",
+         "note": "The same model after instruction tuning. It expects the chat format -- "
+                 "use the Compare tab, not free continuation."},
         {"id": "HuggingFaceTB/SmolLM2-135M", "label": "SmolLM2-135M", "kind": "base",
          "note": "General-purpose base model of almost identical size. A fair A/B against yours."},
         {"id": "HuggingFaceTB/SmolLM2-135M-Instruct", "label": "SmolLM2-135M-Instruct", "kind": "instruct",
@@ -236,9 +243,10 @@ def web():
     def load(model_id: str):
         if model_id in cache:
             return cache[model_id]
-        if model_id == LOCAL_ALIAS:
+        if model_id in (LOCAL_ALIAS, SFT_ALIAS):
             volume.reload()
-            path = config.BASE_CKPT_DIR
+            path = (config.BASE_CKPT_DIR if model_id == LOCAL_ALIAS
+                    else f"{sft_config.SFT_CKPT_DIR}/hf")
         else:
             check_size(model_id)
             path = model_id
@@ -325,5 +333,88 @@ def web():
         prompt_text = tok.decode(ids[0], skip_special_tokens=True)
         return {"model_id": model_id, "prompt": prompt_text,
                 "completion": full[len(prompt_text):], "full": full}
+
+    # ---------------------------------------------------------------- compare
+    # Both models get the IDENTICAL chat-formatted prompt, rendered by the same
+    # sft_gen.render_chat the training set was built with. Re-implementing the
+    # template here would let it drift from training; see the SFT book, ch. 10.
+    REFUSAL_MARKERS = ("does not say", "do not know", "does not provide", "not enough",
+                       "does not contain", "not stated", "no information",
+                       "does not mention")
+
+    def run_chat(model_id: str, prompt: str, max_new: int, temperature: float) -> dict:
+        import time
+
+        t0 = time.time()
+        tok, model = load(model_id)
+        eos_id = tok.convert_tokens_to_ids("<|eos|>")
+        pad_id = tok.convert_tokens_to_ids("<|pad|>")
+        ids = tok(prompt, return_tensors="pt", add_special_tokens=False).input_ids
+        n_prompt = int(ids.shape[1])
+        if n_prompt >= model.config.max_position_embeddings:
+            raise ValueError(
+                f"prompt is {n_prompt} tokens; the model's limit is "
+                f"{model.config.max_position_embeddings}. Shorten the passage.")
+        greedy = temperature <= 0.0
+        with torch.no_grad():
+            out = model.generate(
+                ids, max_new_tokens=max_new, do_sample=not greedy,
+                temperature=None if greedy else temperature,
+                top_p=None if greedy else 0.95,
+                eos_token_id=eos_id, pad_token_id=pad_id)
+        new = out[0, n_prompt:].tolist()
+        stopped = eos_id in new
+        if stopped:
+            new = new[:new.index(eos_id)]
+        text = tok.decode(new).strip()
+        return {"model_id": model_id, "text": text, "new_tokens": len(new),
+                "stopped_on_eos": stopped,
+                "refused": any(m in text.lower() for m in REFUSAL_MARKERS),
+                "ms": int((time.time() - t0) * 1000)}
+
+    @api.post("/answer")
+    async def answer(request: Request):
+        import sft_gen as sg
+
+        body = await request.json()
+        context = str(body.get("context") or "")[:MAX_PROMPT_CHARS]
+        question = str(body.get("question") or "").strip()[:1_000]
+        max_new = clamp(body.get("max_new_tokens", 128), 1, MAX_NEW_TOKENS, 128)
+        temperature = clamp(body.get("temperature", 0.0), 0.0, 2.0, 0.0)
+        if not question:
+            raise HTTPException(status_code=400, detail="question is required")
+
+        prompt, _ = sg.render_chat(question, "", context)
+        results, errors = {}, {}
+        for key, model_id in (("base", LOCAL_ALIAS), ("sft", SFT_ALIAS)):
+            try:
+                results[key] = run_chat(model_id, prompt, max_new, temperature)
+            except ValueError as e:
+                errors[key] = str(e)
+            except Exception as e:  # noqa: BLE001 -- one model failing must not hide the other
+                errors[key] = f"{type(e).__name__}: {e}"
+        if not results:
+            raise HTTPException(status_code=400,
+                                detail=errors.get("sft") or errors.get("base") or "failed")
+        return {"question": question, "context_chars": len(context),
+                "results": results, "errors": errors}
+
+    @api.get("/eval-sample")
+    def eval_sample(i: int = 0):
+        """One held-out SFT pair, so the UI can offer an honest ready-made test."""
+        import json
+        import os
+
+        path = sft_config.SFT_EVAL_PATH
+        if not os.path.exists(path):
+            raise HTTPException(status_code=404, detail="no eval set on the Volume")
+        volume.reload()
+        with open(path, encoding="utf-8") as fh:
+            rows = [json.loads(line) for line in fh if line.strip()]
+        row = rows[int(i) % len(rows)]
+        return {"index": int(i) % len(rows), "total": len(rows),
+                "source": row["source"], "type": row["type"],
+                "question": row["question"], "context": row["context"],
+                "gold": row["answer"]}
 
     return api

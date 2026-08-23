@@ -304,8 +304,13 @@ distillation transfers behaviour, not knowledge.
 **Effective diversity ($n_{\text{eff}}$)** — inverse participation ratio over near-duplicate
 clusters; the number of *distinct* examples a dataset really contains.
 
-**Grounded QA / RAFT** — answering strictly from provided context and refusing when the
-context does not support an answer. The core behaviour this build teaches.
+**Grounded QA (open-book QA)** — answering strictly from a provided passage and refusing when
+that passage does not support an answer. The core behaviour this build teaches.
+
+**RAFT (Retrieval-Augmented Fine-Tuning)** — grounded QA hardened for retrieval: each example
+mixes the oracle passage with distractors, and a fraction carry no oracle, teaching the model to
+ignore irrelevant retrieved chunks. **Not implemented here** — we used a single oracle passage
+per example. See Chapter 1.
 
 **LIMA / superficial alignment** — the hypothesis that capability comes from pretraining and
 alignment merely selects a response format, so a small curated set suffices.
@@ -337,8 +342,9 @@ batch rather than once per item; scales as $(1 - 1/B)$.
 
 - **Zhou et al. (2023)**, *LIMA: Less Is More for Alignment* — the superficial alignment
   hypothesis; 1,000 curated examples.
-- **Zhang et al. (2024)**, *RAFT: Adapting Language Model to Domain Specific RAG* — grounded QA
-  with explicit refusal training.
+- **Zhang et al. (2024)**, *RAFT: Adapting Language Model to Domain Specific RAG* — the
+  distractor-mixing recipe this build stopped short of. Read it before deploying behind a
+  retriever.
 - **Wang et al. (2023)**, *Self-Instruct* — bootstrapping instruction data from seed examples.
 - **Xu et al. (2023)**, *WizardLM / Evol-Instruct* — evolving instructions toward difficulty.
 - **Hinton et al. (2015)**, *Distilling the Knowledge in a Neural Network* — the original

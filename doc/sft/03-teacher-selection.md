@@ -35,8 +35,12 @@ families.
 
 **Family B — what behaviour you are teaching.**
 
-- *Grounded QA / RAFT*: answer strictly from the provided context; say so when the context
-  does not support an answer.
+- *Grounded QA*: answer strictly from the provided context; say so when the context does not
+  support an answer. **This is what we built.**
+- *RAFT* (Retrieval-Augmented Fine-Tuning): grounded QA hardened for retrieval — each example
+  mixes the oracle passage with distractors, and some examples contain no oracle at all, so the
+  model learns to ignore whatever junk a retriever returns. We did **not** build this; see
+  Chapter 1 for the distinction and Chapter 13 for what it would cost to add.
 - *Summarisation*: compress faithfully without inventing.
 - *Extraction / classification*: pull named fields into JSON, or apply a label.
 - *Rewriting*: restate in a target register without changing meaning.

@@ -234,8 +234,13 @@ The harness is a testing tool. Three things stand between it and something user-
 - **Context length enforcement at the boundary.** The harness returns an error when the prompt
   exceeds 1,024 tokens; a real service must truncate or chunk the passage instead, and decide
   which end to cut.
-- **A retriever.** The model's whole competence is *reading a supplied passage*. Something has
-  to supply it. That is the RAG system Chapter 1 mentioned and this project does not build.
+- **A retriever — and retraining for it.** The model's whole competence is *reading a supplied
+  passage*. Something has to supply it, and that is the RAG system this project does not build.
+  But note the trap in Chapter 1: every training example gave the model exactly one passage,
+  and it was always the right one. A real retriever returns three to five chunks of mixed
+  relevance, which is a condition this model has never once seen. Putting it behind a retriever
+  without first rebuilding the dataset with distractors (Chapter 13, change 6) is deploying it
+  out-of-distribution on the most common input it will ever receive.
 
 The existing `live/modal_serve.py` web playground is not the right front end for this model:
 it is shaped for base-model text continuation, with no chat template and no stop-token

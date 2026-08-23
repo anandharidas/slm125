@@ -1121,6 +1121,155 @@ def eval_models(n: int = 60) -> None:
     write_stats.remote({"eval": {"cost_usd": 0.0, **res["results"]}})
 
 
+# =============================================================================
+# Phase 3: judged ACCURACY over generated answers (SFT book, ch. 13 change 1)
+# =============================================================================
+@app.function(image=gpu_image, gpu=SFT_GPU, volumes=VOLUMES, timeout=60 * 60)
+def generate_eval_answers(max_new_tokens: int = 128) -> list[dict]:
+    """Greedy generations from BOTH checkpoints over every held-out pair."""
+    import torch
+    from transformers import AutoTokenizer, LlamaForCausalLM
+
+    import sft_gen as sg
+
+    tok = AutoTokenizer.from_pretrained(config.TOKENIZER_DIR)
+    eos_id, pad_id = tok.get_vocab()["<|eos|>"], tok.get_vocab()["<|pad|>"]
+    device = torch.device("cuda", 0)
+    rows = _load_jsonl(sft_config.SFT_EVAL_PATH)
+
+    models = {}
+    for name, path in (("base", config.BASE_CKPT_DIR),
+                       ("sft", f"{sft_config.SFT_CKPT_DIR}/hf")):
+        m = LlamaForCausalLM.from_pretrained(path, torch_dtype=torch.bfloat16)
+        m.config.use_cache = True
+        models[name] = m.to(device).eval()
+
+    out: list[dict] = []
+    for i, r in enumerate(rows):
+        cand = sg.Candidate(**{k: v for k, v in r.items()
+                               if k in sg.Candidate.__dataclass_fields__})
+        prompt, _ = sg.render_chat(cand.question, "", cand.context)
+        ids = torch.tensor([tok.encode(prompt, add_special_tokens=False)], device=device)
+        row = {"id": r["id"], "source": r["source"], "type": r["type"],
+               "question": r["question"], "context": r["context"], "gold": r["answer"]}
+        for name, model in models.items():
+            with torch.no_grad():
+                gen = model.generate(ids, max_new_tokens=max_new_tokens, do_sample=False,
+                                     eos_token_id=eos_id, pad_token_id=pad_id)
+            new = gen[0, ids.shape[1]:].tolist()
+            stopped = eos_id in new
+            if stopped:
+                new = new[:new.index(eos_id)]
+            row[f"{name}_answer"] = tok.decode(new).strip()
+            row[f"{name}_tokens"] = len(new)
+            row[f"{name}_stopped"] = stopped
+        out.append(row)
+        if (i + 1) % 50 == 0:
+            print(f"generated {i + 1}/{len(rows)}", flush=True)
+    return out
+
+
+@app.function(image=gemini_image, volumes=VOLUMES, secrets=[gemini_secret],
+              timeout=60 * 60)
+def score_answers(rows: list[dict], which: str) -> dict:
+    """Judge one model's generated answers against passage + gold."""
+    import sft_gen as sg
+
+    client = _gemini_client()
+    items = [{"type": r["type"], "context": r["context"], "question": r["question"],
+              "gold": r["gold"], "generated": r[f"{which}_answer"]} for r in rows]
+    bs = sft_config.JUDGE_BATCH_SIZE
+    totals = {"input_tokens": 0, "output_tokens": 0, "calls": 0}
+    verdicts: list[dict] = []
+
+    for start in range(0, len(items), bs):
+        batch = items[start:start + bs]
+        try:
+            text, usage = _flash_call(client, sg.accuracy_prompt(batch),
+                                      sg.ACC_RESPONSE_SCHEMA,
+                                      sft_config.JUDGE_MAX_OUTPUT_TOKENS,
+                                      model=sft_config.GEMINI_JUDGE_MODEL)
+            for k in ("input_tokens", "output_tokens", "calls"):
+                totals[k] += usage.get(k, 0)
+            obj = sg.parse_generation(text) or {}
+            by_idx = {int(v.get("idx", -1)): v for v in obj.get("results", [])
+                      if isinstance(v, dict)}
+        except Exception as exc:  # noqa: BLE001 -- an unjudged answer is not a correct one
+            print(f"judge batch at {start} failed: {exc}", flush=True)
+            by_idx = {}
+        for j in range(len(batch)):
+            v = by_idx.get(j) or {"verdict": "wrong", "correct": False,
+                                  "grounded": False, "refusal": False,
+                                  "reason": "judge_failed"}
+            verdicts.append(v)
+
+    def rate(pred, subset=None) -> float:
+        pool = [(v, r) for v, r in zip(verdicts, rows)
+                if subset is None or r["type"] == subset]
+        return round(sum(1 for v, _ in pool if pred(v)) / max(len(pool), 1), 4)
+
+    cost = sft_config.live_cost(totals["input_tokens"], totals["output_tokens"])
+    stats = {
+        "model": which,
+        "n": len(rows),
+        "accuracy": rate(lambda v: v.get("verdict") == "correct"),
+        "grounded": rate(lambda v: bool(v.get("grounded"))),
+        "refused": rate(lambda v: bool(v.get("refusal"))),
+        "hallucinated": rate(lambda v: not v.get("grounded") and not v.get("refusal")),
+        "by_type": {t: rate(lambda v: v.get("verdict") == "correct", t)
+                    for t in sft_config.TYPE_MIX},
+        "calls": totals["calls"],
+        "cost_usd": cost,
+    }
+    detail = [{"id": r["id"], "type": r["type"], "question": r["question"],
+               "gold": r["gold"], "generated": r[f"{which}_answer"], **v}
+              for r, v in zip(rows, verdicts)]
+    return {"stats": stats, "detail": detail}
+
+
+@app.function(image=cpu_image, volumes=VOLUMES, timeout=60 * 10)
+def save_accuracy(payload: dict) -> dict:
+    import json
+    import os
+
+    os.makedirs(sft_config.SFT_DIR, exist_ok=True)
+    with open(f"{sft_config.SFT_DIR}/accuracy.json", "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, indent=2)
+    volume.commit()
+    return payload["summary"]
+
+
+@app.local_entrypoint()
+def accuracy(max_new_tokens: int = 128) -> None:
+    """Step 3: the number Chapter 13 said was missing. ~$0.30."""
+    import json
+
+    rows = generate_eval_answers.remote(max_new_tokens)
+    print(f"generated answers for {len(rows)} held-out pairs from both checkpoints")
+
+    base, sft = score_answers.remote(rows, "base"), score_answers.remote(rows, "sft")
+    b, s = base["stats"], sft["stats"]
+    spent = b["cost_usd"] + s["cost_usd"]
+
+    print("\n" + "=" * 78)
+    print(f"{'metric':<30}{'base':>12}{'fine-tuned':>14}")
+    print("-" * 78)
+    for key, label in (("accuracy", "correct (judged)"),
+                       ("grounded", "grounded in the passage"),
+                       ("hallucinated", "hallucinated"),
+                       ("refused", "refused")):
+        print(f"{label:<30}{b[key]:>11.1%}{s[key]:>14.1%}")
+    print("-" * 78)
+    for t in sft_config.TYPE_MIX:
+        print(f"{'  accuracy: ' + t:<30}{b['by_type'][t]:>11.1%}{s['by_type'][t]:>14.1%}")
+    print(f"\njudged {b['n']} pairs x 2 models in {b['calls'] + s['calls']} calls  ${spent:.3f}")
+
+    save_accuracy.remote({"summary": {"base": b, "sft": s},
+                          "base_detail": base["detail"], "sft_detail": sft["detail"]})
+    write_stats.remote({"accuracy": {"cost_usd": spent, "base": b, "sft": s}})
+    print(json.dumps({"base": b, "sft": s}, indent=2))
+
+
 @app.function(image=cpu_image, volumes=VOLUMES, timeout=60 * 10)
 def repair_stats() -> dict:
     """Backfill derived fields that a stage wrote before its metric was fixed."""

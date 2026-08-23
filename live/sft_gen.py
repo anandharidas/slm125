@@ -408,3 +408,71 @@ def cosine_dedup(vectors, order: list[int], threshold: float = sc.NEAR_DUP_COSIN
         n += 1
         kept.append(i)
     return kept
+
+
+# =============================================================================
+# Accuracy judge (Phase 3): grades GENERATED answers, not training data
+# =============================================================================
+_ACC_INSTRUCTIONS = """You are grading a small model's answers against a source passage.
+
+For EACH item you are given the PASSAGE, the QUESTION, the GOLD answer written by a
+careful reader, and the MODEL answer under test.
+
+Judge the MODEL answer only:
+  correct   - true if it conveys the same substantive information as GOLD, or is
+              otherwise fully supported by the PASSAGE. Wording may differ freely.
+              A missing key figure, a wrong number, name or date makes it false.
+  grounded  - true if every fact it asserts appears in the PASSAGE. An answer that
+              invents a figure, date or entity is NOT grounded even if it sounds right.
+  refusal   - true if the MODEL answer declines to answer (e.g. "the context does not say").
+  verdict   - "correct" if correct AND grounded.
+              "refused" if the model refused.
+              "wrong" otherwise.
+
+For items whose GOLD is itself a refusal, the correct behaviour IS to refuse: mark
+correct=true and verdict="correct" when the model refuses, and wrong when it answers.
+
+reason: at most 12 words.
+
+Return JSON only:
+{"results":[{"idx":0,"correct":true,"grounded":true,"refusal":false,"verdict":"correct","reason":"..."}]}
+Return exactly one result object per item, in order.
+
+ITEMS:
+"""
+
+ACC_RESPONSE_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "results": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "idx": {"type": "integer"},
+                    "correct": {"type": "boolean"},
+                    "grounded": {"type": "boolean"},
+                    "refusal": {"type": "boolean"},
+                    "verdict": {"type": "string",
+                                "enum": ["correct", "refused", "wrong"]},
+                    "reason": {"type": "string"},
+                },
+                "required": ["idx", "correct", "grounded", "refusal", "verdict", "reason"],
+            },
+        }
+    },
+    "required": ["results"],
+}
+
+
+def accuracy_prompt(batch: list[dict], passage_chars: int = sc.JUDGE_PASSAGE_CHARS) -> str:
+    blocks = []
+    for i, r in enumerate(batch):
+        blocks.append(
+            f"--- ITEM {i} (type: {r['type']}) ---\n"
+            f"PASSAGE:\n\"\"\"\n{r['context'][:passage_chars]}\n\"\"\"\n"
+            f"QUESTION: {r['question']}\n"
+            f"GOLD: {r['gold']}\n"
+            f"MODEL: {r['generated']}\n"
+        )
+    return _ACC_INSTRUCTIONS + "\n".join(blocks)

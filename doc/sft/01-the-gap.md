@@ -134,10 +134,34 @@ necessary, and our pipeline does both: the generation prompt says *the answer mu
 supported by the passage alone*, and a separate judge call re-reads the passage and checks.
 Chapter 5 measures how often the constraint failed — 15.6% of the time.
 
-This design is **RAFT** (Retrieval-Augmented Fine-Tuning, Zhang et al., 2024): train the model
-to answer from provided context and to refuse when the context does not support an answer.
-The refusal half is what makes a downstream retrieval system trustworthy, and it is why 20% of
-our dataset is deliberately unanswerable.
+### What this is, and what it is not
+
+This design is **grounded (open-book) QA with a refusal share**: one passage per example, an
+answer supported by that passage alone, and 20% of examples where the honest answer is that the
+passage does not say. The refusal half is what makes a downstream retrieval system trustworthy.
+
+It is tempting to call this **RAFT** (Retrieval-Augmented Fine-Tuning, Zhang et al., 2024), and
+we very nearly did. It is not, and the distinction is worth being precise about because it
+determines what the finished model can be deployed into.
+
+| RAFT | This build |
+|---|---|
+| Each example carries the oracle document **plus distractor documents** | **One passage**, always the oracle |
+| A fraction of examples carry **only distractors — no oracle at all** | Never; the right passage is always present |
+| Answers are chain-of-thought and **quote the oracle** (`##begin_quote##`) | Short direct answers, no CoT, no citation spans |
+| Refusal is triggered when the **oracle is missing** from the retrieved set | Refusal is triggered when the **question outruns a relevant passage** |
+
+That last row is the subtle one, and the two mechanisms produce similar-looking outputs from
+different causes. RAFT teaches *ignore the irrelevant material the retriever handed you.* We
+taught *do not invent what is not on the page.* Both yield refusals; only the first survives
+contact with a noisy retriever.
+
+The practical consequence is a real limitation of this build: **our model has never seen an
+irrelevant passage.** A production retriever returns three to five chunks of mixed quality, and
+nothing in these 2,620 examples gives the model any signal for handling that. Chapters 9 and 10
+recommend deploying it behind a retriever, which is correct — but it would be meeting conditions
+it was never trained for. Chapter 13 proposes adding distractors, which is the change that would
+make this an actual RAFT set.
 
 ### Why refusal has to be taught explicitly
 

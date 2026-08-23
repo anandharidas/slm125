@@ -86,6 +86,7 @@ export default function Page() {
           </a>{" "}
           — a 125M legal/financial model trained from scratch — or any HuggingFace causal LM.
         </p>
+        <p style={{marginTop:8}}><a href="/compare">→ Compare the base model against the fine-tuned one, side by side</a></p>
       </header>
 
       <div className="stack">

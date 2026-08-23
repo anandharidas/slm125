@@ -6,11 +6,11 @@ The build worked. Validation loss halved, the model learned to stop and to refus
 $7 of a $15 ceiling. This chapter is about the version we would build next, and it is ordered
 by how much difference each change would make.
 
-Six changes matter. Three are cheap fixes to defects; three are genuine design changes.
+Seven changes matter. Three are cheap fixes to defects; four are genuine design changes.
 
 ---
 
-## The six changes, in priority order
+## The seven changes, in priority order
 
 ### 1. Measure answer accuracy with a judge — the biggest hole in the build
 
@@ -112,7 +112,48 @@ of unknown tightness. The judge is already reading every pair — adding one boo
 sampled randomly from a stratified pool. Draw per stratum instead, reusing the allocator we
 already had. Three lines.
 
-### 6. Broaden beyond grounded QA — but only with a bigger dataset
+### 6. Add distractors — turn a grounded-QA set into an actual RAFT set
+
+**What we did.** One passage per example, always the correct one. Chapter 1 sets out why that
+is grounded QA and *not* RAFT.
+
+**Why it matters.** The model is intended to sit behind a retriever, and a retriever returns
+three to five chunks of mixed quality. Ours has never seen an irrelevant passage in 2,620
+examples. It has no signal at all for the most common condition it will actually meet.
+
+**What RAFT does.** Each example carries the oracle passage plus $k$ distractors drawn from
+elsewhere in the corpus, and a fraction $1-P$ of examples carry **only** distractors, so the
+model learns that the honest answer to "the retriever gave me nothing useful" is a refusal.
+
+**The binding constraint is context length.** At 1,024 tokens, with ~100 tokens of overhead for
+the system prompt, question, answer and special tokens, roughly 920 remain for passages:
+
+| Layout | Tokens per chunk | Verdict |
+|---|---|---|
+| 1 oracle (what we did) | 700 | Rich passages, no retrieval realism |
+| 1 oracle + 1 distractor | ~460 | Feasible; minimal distractor pressure |
+| **1 oracle + 2 distractors** | **~300** | **The realistic RAFT layout at this context size** |
+| 1 oracle + 4 distractors | ~180 | Too short to ask a substantive question about |
+
+So this is **not** a cheap post-hoc change. Shrinking passages from 700 to 300 tokens means the
+questions must be regenerated, because ours were written against 700-token passages.
+
+**Cost: roughly $5, and a full rebuild of Phase 1.** Counter-intuitively it is *cheaper* than
+the run we did — the generation prompt's input drops from ~619 tokens to ~320, taking about 25%
+off both generation and judging — so the same 4,000 candidates come to about $4.80 instead of
+$6.38. Combined with the 90/5/5 reallocation of change 2, a RAFT set of ~5,500 kept pairs fits
+comfortably inside the $15 ceiling.
+
+**A distractor sampling rule worth stating.** Draw distractors from the *same source* as the
+oracle — case-law distractors for case-law oracles — not at random across the corpus. A random
+distractor is distinguishable by register alone, and the model would learn to detect genre
+rather than relevance.
+
+**What it would buy, measurably.** A new evaluation axis, absent from Chapter 9 entirely:
+accuracy and refusal rate as a function of oracle position and distractor count. That is the
+number that predicts behaviour in a real RAG pipeline, and we currently cannot report it.
+
+### 7. Broaden beyond grounded QA — but only with a bigger dataset
 
 **What we did.** One task type: grounded QA, in three flavours. Deliberately, because 2,620
 pairs across four behaviours is ~650 each, which teaches four things faintly.
@@ -217,7 +258,7 @@ so a reader can see both what improved and what did not.
 
 ## What we measured
 
-**The six changes, priced:**
+**The seven changes, priced:**
 
 | # | Change | Cost | Expected effect |
 |---|---|---|---|
@@ -226,7 +267,8 @@ so a reader can see both what improved and what did not.
 | 3 | Two epochs, best checkpoint | **−$0.03** | −0.031 nats, one third less training |
 | 4 | Fix `?` validator; read rejects | $0 | +259 pairs, −phrasing bias |
 | 5 | Verify type; stratify eval draw | $0 | Honest mix figures |
-| 6 | Add extraction + summarisation | $0 *(within change 2)* | Broader skill, needs the bigger set |
+| 6 | **Add distractors (real RAFT)** | ~$5, full Phase 1 rebuild | Survives a noisy retriever; new eval axis |
+| 7 | Add extraction + summarisation | $0 *(within change 2)* | Broader skill, needs the bigger set |
 
 **The build we would run next**, on the same $15:
 
@@ -235,6 +277,7 @@ so a reader can see both what improved and what did not.
 | Envelope | 75 / 20 / 5 | **90 / 5 / 5** |
 | Candidates | 4,000 | **8,470** |
 | Kept pairs | 2,620 | **~5,550** |
+| Retrieval realism | 1 oracle passage | **1 oracle + 2 distractors, some oracle-free** |
 | Task types | Grounded QA only | QA 70% / extraction 15% / summarisation 15% |
 | Epochs | 3 (final checkpoint) | **2 (best checkpoint)** |
 | Evaluation | Behaviour only | **Behaviour + judged accuracy** |
